@@ -2,6 +2,8 @@
 
 This package helps you work with Base64 encoding, providing a similar interface as in [elm/bytes](https://package.elm-lang.org/packages/elm/bytes/latest) and [elm/json](https://package.elm-lang.org/packages/elm/json/latest)
 
+[Demo](https://ivadzy.github.io/demos/bbase64)
+
 ## Why another Base64 library?
 
 * Supports Elm 0.19
