@@ -61,3 +61,19 @@ decodedAsString =
     Bytes.Decode.decode (Bytes.Decode.string (Bytes.width decodedAsBytes)) decodedAsBytes
 
 ```
+
+Also you can map `Decoder`:
+
+```elm
+import Base64.Decode as Decode
+
+input =
+    "TWFu"
+
+decoder =
+    Decode.map String.reverse Decode.string
+
+decoded = 
+    Decode.decode decoder input -- naM
+```
+

@@ -1,6 +1,6 @@
 module Base64.Decode exposing
     ( Decoder, string, bytes
-    , decode, Error(..)
+    , decode, map, Error(..)
     )
 
 {-| The Decode module enables you to decode Base64 strings into certain values.
@@ -13,7 +13,7 @@ module Base64.Decode exposing
 
 # Decoding
 
-@docs decode, Error
+@docs decode, map, Error
 
 -}
 
@@ -84,6 +84,13 @@ Decoding can fail, see `Error`.
 decode : Decoder a -> String -> Result Error a
 decode (Decoder decoder) input =
     decoder input
+
+
+{-| Transforms the value produced by a decoder.
+-}
+map : (a -> b) -> Decoder a -> Decoder b
+map transform (Decoder decoder_) =
+    Decoder (decoder_ >> Result.map transform)
 
 
 {-| Errors that can occur during a decoding:

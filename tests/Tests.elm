@@ -1,4 +1,4 @@
-module Tests exposing (badInputSuite, bytesDecodeSuite, bytesEncodeSuite, decodeSuite, encodeSuite, identitySuite)
+module Tests exposing (badInputSuite, bytesDecodeSuite, bytesEncodeSuite, decodeSuite, encodeSuite, identitySuite, mapSuite)
 
 import Base64.Decode as Decode
 import Base64.Encode as Encode
@@ -136,6 +136,51 @@ identitySuite =
                         Decode.decode Decode.string encoded
                 in
                 Expect.equal (Ok input) decoded
+        ]
+
+
+mapSuite : Test
+mapSuite =
+    describe "Base64.Decode.map"
+        [ test "Map must work on a valid input" <|
+            \_ ->
+                let
+                    input =
+                        "TWFu"
+
+                    decoder =
+                        Decode.map String.reverse Decode.string
+
+                    decoded =
+                        Decode.decode decoder input
+                in
+                Expect.equal (Ok "naM") decoded
+        , test "Decode.Map must propagate ValidationError on an invalid input" <|
+            \_ ->
+                let
+                    input =
+                        "==="
+
+                    decoder =
+                        Decode.map (\s -> String.reverse s) Decode.string
+
+                    decoded =
+                        Decode.decode decoder input
+                in
+                Expect.equal (Err Decode.ValidationError) decoded
+        , test "Decode.Map must propagate InvalidByteSequence error on an invalid input" <|
+            \_ ->
+                let
+                    input =
+                        "/Ng9"
+
+                    decoder =
+                        Decode.map (\s -> String.reverse s) Decode.string
+
+                    decoded =
+                        Decode.decode decoder input
+                in
+                Expect.equal (Err Decode.InvalidByteSequence) decoded
         ]
 
 
