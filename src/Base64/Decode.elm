@@ -113,10 +113,15 @@ tryDecode : String -> Result Error DecodeState
 tryDecode input =
     strip input
         |> Result.andThen validate
-        |> Result.map String.toList
-        |> Result.map (List.filterMap Table.decode)
         |> Result.map
-            (List.foldl decodeStep initialState)
+            (String.foldl
+                (\c state ->
+                    Table.decode c
+                        |> Maybe.map (\i -> decodeStep i state)
+                        |> Maybe.withDefault state
+                )
+                initialState
+            )
 
 
 type alias DecodeState =
