@@ -29,6 +29,7 @@ cases =
     , ( "💩💩💩", "8J+SqfCfkqnwn5Kp" )
     , ( "Man", "TWFu" )
     , ( String.repeat 5000 "Man", String.repeat 5000 "TWFu" )
+    , ( String.repeat 50000 "Man", String.repeat 50000 "TWFu" )
     ]
 
 
