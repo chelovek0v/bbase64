@@ -30,6 +30,7 @@ cases =
     , ( "Man", "TWFu" )
     , ( String.repeat 5000 "Man", String.repeat 5000 "TWFu" )
     , ( String.repeat 50000 "Man", String.repeat 50000 "TWFu" )
+    , ( String.repeat 250000 "Man", String.repeat 250000 "TWFu" )
     ]
 
 
@@ -194,7 +195,7 @@ encodeHelper testData coder =
     testData
         |> List.map
             (\( input, output ) ->
-                test ("Can encode '" ++ input ++ "'") <|
+                test ("Can encode '" ++ String.left 30 input ++ "(" ++ String.fromInt (String.length input) ++ ")" ++ "'") <|
                     \_ ->
                         coder input
                             |> Expect.equal output
@@ -206,7 +207,7 @@ decodeHelper testData coder =
     testData
         |> List.map
             (\( output, input ) ->
-                test ("Can decode '" ++ input ++ "'") <|
+                test ("Can decode '" ++ String.left 30 input ++ "(" ++ String.fromInt (String.length input) ++ ")" ++ "'") <|
                     \_ ->
                         coder input
                             |> Expect.equal (Ok output)

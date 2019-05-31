@@ -41,13 +41,8 @@ bytes =
     Decoder
         (\input ->
             case tryDecode input of
-                Ok ( _, _, maybeBytes ) ->
-                    case maybeBytes of
-                        Just bytes_ ->
-                            Ok bytes_
-
-                        Nothing ->
-                            Err InvalidByteSequence
+                Ok state ->
+                    Ok <| wrapUp state
 
                 Err e ->
                     -- Propagated ValidationError
@@ -62,18 +57,20 @@ string =
     Decoder
         (\input ->
             case tryDecode input of
-                Ok ( _, _, maybeBytes ) ->
-                    case maybeBytes of
-                        Just bytes_ ->
-                            tryToString bytes_
-
-                        Nothing ->
-                            Ok ""
+                Ok state ->
+                    state |> wrapUp |> tryToString
 
                 Err e ->
                     -- Propagated ValidationError
                     Err e
         )
+
+
+wrapUp : DecodeState -> Bytes
+wrapUp ( _, _, encoders ) =
+    List.reverse encoders
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
 
 
 {-| Turn a `Decoder` into a certain value.
@@ -125,16 +122,16 @@ tryDecode input =
 
 
 type alias DecodeState =
-    ( Shift, Int, Maybe Bytes )
+    ( Shift, Int, List Bytes.Encode.Encoder )
 
 
 initialState : DecodeState
 initialState =
-    ( Shift0, 0, Nothing )
+    ( Shift0, 0, [] )
 
 
 decodeStep : Int -> DecodeState -> DecodeState
-decodeStep sixtet ( shift, blankByte, maybeBytes ) =
+decodeStep sixtet ( shift, blankByte, bytes_ ) =
     let
         maybeFinishedByte =
             case shift of
@@ -150,23 +147,13 @@ decodeStep sixtet ( shift, blankByte, maybeBytes ) =
                 Shift6 ->
                     Just (Bitwise.or blankByte sixtet)
 
-        maybeNextBytes =
+        nextBytes =
             case maybeFinishedByte of
                 Just finishedByte ->
-                    case maybeBytes of
-                        Just bytes_ ->
-                            Just (appendByte finishedByte bytes_)
-
-                        Nothing ->
-                            Just (encodeByte finishedByte)
+                    Bytes.Encode.unsignedInt8 finishedByte :: bytes_
 
                 Nothing ->
-                    case maybeBytes of
-                        Just bytes_ ->
-                            maybeBytes
-
-                        Nothing ->
-                            Nothing
+                    bytes_
 
         nextBlankByte =
             case shift of
@@ -184,7 +171,7 @@ decodeStep sixtet ( shift, blankByte, maybeBytes ) =
     in
     ( Shift.decodeNext shift
     , nextBlankByte
-    , maybeNextBytes
+    , nextBytes
     )
 
 
@@ -225,20 +212,6 @@ validate input =
 
 
 -- Bytes helpers
-
-
-appendByte : Int -> Bytes -> Bytes
-appendByte byte bytes_ =
-    Bytes.Encode.encode <|
-        Bytes.Encode.sequence <|
-            [ Bytes.Encode.bytes bytes_
-            , Bytes.Encode.unsignedInt8 byte
-            ]
-
-
-encodeByte : Int -> Bytes
-encodeByte byte =
-    Bytes.Encode.encode (Bytes.Encode.unsignedInt8 byte)
 
 
 tryToString : Bytes -> Result Error String
