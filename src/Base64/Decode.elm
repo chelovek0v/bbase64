@@ -41,13 +41,8 @@ bytes =
     Decoder
         (\input ->
             case tryDecode input of
-                Ok ( _, _, maybeBytes ) ->
-                    case maybeBytes of
-                        Just bytes_ ->
-                            Ok bytes_
-
-                        Nothing ->
-                            Err InvalidByteSequence
+                Ok ( _, _, deferredEncoders ) ->
+                    Ok (encodeBytes deferredEncoders)
 
                 Err e ->
                     -- Propagated ValidationError
@@ -62,13 +57,10 @@ string =
     Decoder
         (\input ->
             case tryDecode input of
-                Ok ( _, _, maybeBytes ) ->
-                    case maybeBytes of
-                        Just bytes_ ->
-                            tryToString bytes_
-
-                        Nothing ->
-                            Ok ""
+                Ok ( _, _, deferredEncoders ) ->
+                    deferredEncoders
+                        |> encodeBytes
+                        |> tryToString
 
                 Err e ->
                     -- Propagated ValidationError
@@ -113,79 +105,84 @@ tryDecode : String -> Result Error DecodeState
 tryDecode input =
     strip input
         |> Result.andThen validate
-        |> Result.map String.toList
-        |> Result.map (List.filterMap Table.decode)
         |> Result.map
-            (List.foldl decodeStep initialState)
+            (String.foldl
+                (\char state ->
+                    Table.decode char
+                        |> Maybe.map (\sextet -> decodeStep sextet state)
+                        |> Maybe.withDefault state
+                )
+                initialState
+            )
 
 
+{-| The meat structure of the decoding. It uses a list of encoders that later be transformed in
+the target byte sequence. The byte operations are deferred for the sake of perforamnce.
+-}
 type alias DecodeState =
-    ( Shift, Int, Maybe Bytes )
+    ( Shift, Int, List Bytes.Encode.Encoder )
 
 
 initialState : DecodeState
 initialState =
-    ( Shift0, 0, Nothing )
+    ( Shift0, 0, [] )
+
+
+encodeBytes : List Bytes.Encode.Encoder -> Bytes
+encodeBytes encoders =
+    List.reverse encoders
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
 
 
 decodeStep : Int -> DecodeState -> DecodeState
-decodeStep sixtet ( shift, blankByte, maybeBytes ) =
+decodeStep sextet ( shift, partialByte, deferredEncoders ) =
     let
-        maybeFinishedByte =
+        finishedByte =
             case shift of
                 Shift0 ->
                     Nothing
 
                 Shift2 ->
-                    Just (finishBlankByte Shift4 sixtet blankByte)
+                    Just (finishPartialByte Shift4 sextet partialByte)
 
                 Shift4 ->
-                    Just (finishBlankByte Shift2 sixtet blankByte)
+                    Just (finishPartialByte Shift2 sextet partialByte)
 
                 Shift6 ->
-                    Just (Bitwise.or blankByte sixtet)
+                    Just (Bitwise.or partialByte sextet)
 
-        maybeNextBytes =
-            case maybeFinishedByte of
-                Just finishedByte ->
-                    case maybeBytes of
-                        Just bytes_ ->
-                            Just (appendByte finishedByte bytes_)
-
-                        Nothing ->
-                            Just (encodeByte finishedByte)
+        nextDeferredDecoders =
+            case finishedByte of
+                Just byte_ ->
+                    Bytes.Encode.unsignedInt8 byte_ :: deferredEncoders
 
                 Nothing ->
-                    case maybeBytes of
-                        Just bytes_ ->
-                            maybeBytes
-
-                        Nothing ->
-                            Nothing
+                    deferredEncoders
 
         nextBlankByte =
             case shift of
                 Shift0 ->
-                    Shift.shiftLeftBy Shift2 sixtet
+                    Shift.shiftLeftBy Shift2 sextet
 
                 Shift2 ->
-                    Shift.shiftLeftBy Shift4 sixtet
+                    Shift.shiftLeftBy Shift4 sextet
 
                 Shift4 ->
-                    Shift.shiftLeftBy Shift6 sixtet
+                    Shift.shiftLeftBy Shift6 sextet
 
                 Shift6 ->
                     0
     in
     ( Shift.decodeNext shift
     , nextBlankByte
-    , maybeNextBytes
+    , nextDeferredDecoders
     )
 
 
-finishBlankByte : Shift -> Int -> Int -> Int
-finishBlankByte shift sixtet blankByte =
-    Bitwise.or blankByte (Shift.shiftRightZfBy shift sixtet)
+finishPartialByte : Shift -> Int -> Int -> Int
+finishPartialByte shift sextet partialByte =
+    Bitwise.or partialByte (Shift.shiftRightZfBy shift sextet)
 
 
 
@@ -220,20 +217,6 @@ validate input =
 
 
 -- Bytes helpers
-
-
-appendByte : Int -> Bytes -> Bytes
-appendByte byte bytes_ =
-    Bytes.Encode.encode <|
-        Bytes.Encode.sequence <|
-            [ Bytes.Encode.bytes bytes_
-            , Bytes.Encode.unsignedInt8 byte
-            ]
-
-
-encodeByte : Int -> Bytes
-encodeByte byte =
-    Bytes.Encode.encode (Bytes.Encode.unsignedInt8 byte)
 
 
 tryToString : Bytes -> Result Error String
