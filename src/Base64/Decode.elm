@@ -41,8 +41,8 @@ bytes =
     Decoder
         (\input ->
             case tryDecode input of
-                Ok state ->
-                    Ok <| wrapUp state
+                Ok ( _, _, deferredEncoders ) ->
+                    Ok (encodeBytes deferredEncoders)
 
                 Err e ->
                     -- Propagated ValidationError
@@ -57,20 +57,15 @@ string =
     Decoder
         (\input ->
             case tryDecode input of
-                Ok state ->
-                    state |> wrapUp |> tryToString
+                Ok ( _, _, deferredEncoders ) ->
+                    deferredEncoders
+                        |> encodeBytes
+                        |> tryToString
 
                 Err e ->
                     -- Propagated ValidationError
                     Err e
         )
-
-
-wrapUp : DecodeState -> Bytes
-wrapUp ( _, _, encoders ) =
-    List.reverse encoders
-        |> Bytes.Encode.sequence
-        |> Bytes.Encode.encode
 
 
 {-| Turn a `Decoder` into a certain value.
@@ -112,15 +107,18 @@ tryDecode input =
         |> Result.andThen validate
         |> Result.map
             (String.foldl
-                (\c state ->
-                    Table.decode c
-                        |> Maybe.map (\i -> decodeStep i state)
+                (\char state ->
+                    Table.decode char
+                        |> Maybe.map (\sextet -> decodeStep sextet state)
                         |> Maybe.withDefault state
                 )
                 initialState
             )
 
 
+{-| The meat structure of the decoding. It uses a list of encoders that later be transformed in
+the target byte sequence. The byte operations are deferred for the sake of perforamnce.
+-}
 type alias DecodeState =
     ( Shift, Int, List Bytes.Encode.Encoder )
 
@@ -130,54 +128,61 @@ initialState =
     ( Shift0, 0, [] )
 
 
+encodeBytes : List Bytes.Encode.Encoder -> Bytes
+encodeBytes encoders =
+    List.reverse encoders
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
+
+
 decodeStep : Int -> DecodeState -> DecodeState
-decodeStep sixtet ( shift, blankByte, bytes_ ) =
+decodeStep sextet ( shift, partialByte, deferredEncoders ) =
     let
-        maybeFinishedByte =
+        finishedByte =
             case shift of
                 Shift0 ->
                     Nothing
 
                 Shift2 ->
-                    Just (finishBlankByte Shift4 sixtet blankByte)
+                    Just (finishPartialByte Shift4 sextet partialByte)
 
                 Shift4 ->
-                    Just (finishBlankByte Shift2 sixtet blankByte)
+                    Just (finishPartialByte Shift2 sextet partialByte)
 
                 Shift6 ->
-                    Just (Bitwise.or blankByte sixtet)
+                    Just (Bitwise.or partialByte sextet)
 
-        nextBytes =
-            case maybeFinishedByte of
-                Just finishedByte ->
-                    Bytes.Encode.unsignedInt8 finishedByte :: bytes_
+        nextDeferredDecoders =
+            case finishedByte of
+                Just byte_ ->
+                    Bytes.Encode.unsignedInt8 byte_ :: deferredEncoders
 
                 Nothing ->
-                    bytes_
+                    deferredEncoders
 
         nextBlankByte =
             case shift of
                 Shift0 ->
-                    Shift.shiftLeftBy Shift2 sixtet
+                    Shift.shiftLeftBy Shift2 sextet
 
                 Shift2 ->
-                    Shift.shiftLeftBy Shift4 sixtet
+                    Shift.shiftLeftBy Shift4 sextet
 
                 Shift4 ->
-                    Shift.shiftLeftBy Shift6 sixtet
+                    Shift.shiftLeftBy Shift6 sextet
 
                 Shift6 ->
                     0
     in
     ( Shift.decodeNext shift
     , nextBlankByte
-    , nextBytes
+    , nextDeferredDecoders
     )
 
 
-finishBlankByte : Shift -> Int -> Int -> Int
-finishBlankByte shift sixtet blankByte =
-    Bitwise.or blankByte (Shift.shiftRightZfBy shift sixtet)
+finishPartialByte : Shift -> Int -> Int -> Int
+finishPartialByte shift sextet partialByte =
+    Bitwise.or partialByte (Shift.shiftRightZfBy shift sextet)
 
 
 
