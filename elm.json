@@ -3,7 +3,7 @@
     "name": "chelovek0v/bbase64",
     "summary": "Padding insensitive, elm/bytes based, functional implementation of Base64",
     "license": "MIT",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "exposed-modules": [
         "Base64.Encode",
         "Base64.Decode"

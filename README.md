@@ -2,9 +2,9 @@
 
 This package helps you work with Base64 encoding, providing a similar interface as in [elm/bytes](https://package.elm-lang.org/packages/elm/bytes/latest) and [elm/json](https://package.elm-lang.org/packages/elm/json/latest)
 
-**THIS PACKAGE HAS BEEN RENAMED. PREVIOUS NAME was ivadzy/bbase65**
+**THIS PACKAGE HAS BEEN RENAMED. PREVIOUS NAME was ivadzy/bbase64**
 
-Please update your dependencies, pay attention to the package version because it was reset to 1.0.0 from 1.1.1.
+Please update your dependencies, pay attention to the package version because it was reset to 1.0.1 from 1.1.1.
 
 ## Why another Base64 library?
 
